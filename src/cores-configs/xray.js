@@ -1,4 +1,4 @@
-import { getConfigAddresses, extractWireguardParams, base64ToDecimal, generateRemark, randomUpperCase, getRandomPath, resolveDNS, isDomain, getDomain } from './helpers';
+import { getConfigAddresses, extractWireguardParams, base64ToDecimal, generateRemark, randomUpperCase, resolveDNS, isDomain, getDomain, generateWsPath } from './helpers';
 import { getDataset } from '../kv/handlers';
 
 async function buildXrayDNS(outboundAddrs, domainToStaticIPs, isWorkerLess, isWarp, customDns, customDnsHosts) {
@@ -115,6 +115,14 @@ function buildXrayRoutingRules(isChain, isBalancer, isWorkerLess, isWarp) {
     const rules = [
         {
             inboundTag: [
+                "socks-in"
+            ],
+            port: 53,
+            outboundTag: "dns-out",
+            type: "field"
+        },
+        {
+            inboundTag: [
                 "dns-in"
             ],
             outboundTag: "dns-out",
@@ -138,7 +146,7 @@ function buildXrayRoutingRules(isChain, isBalancer, isWorkerLess, isWarp) {
 
     const finallOutboundTag = isChain ? "chain" : isWorkerLess ? "fragment" : "proxy";
     const outTag = isBalancer ? "all" : finallOutboundTag;
-    // const remoteDnsServers = isWorkerLess ? ["remote-dns", "remote-dns-fallback"] : ["remote-dns"];
+
     addRoutingRule(["remote-dns"], null, null, null, null, outTag, isBalancer);
     addRoutingRule(["dns"], null, null, null, null, "direct");
 
@@ -198,10 +206,10 @@ function buildXrayRoutingRules(isChain, isBalancer, isWorkerLess, isWarp) {
     return rules;
 }
 
-function buildXrayVLOutbound(tag, address, port, host, sni, proxyIPs, isFragment, allowInsecure) {
+function buildXrayVLOutbound(tag, address, port, host, sni, isFragment, allowInsecure) {
     const settings = globalThis.settings;
-    const proxyIpPath = proxyIPs.length ? `/${btoa(proxyIPs.join(','))}` : '';
-    const path = `/${getRandomPath(16)}${proxyIpPath}?ed=2560`;
+    const path = `${generateWsPath("vl")}?ed=2560`;
+
     const outbound = {
         protocol: atob('dmxlc3M='),
         settings: {
@@ -225,7 +233,7 @@ function buildXrayVLOutbound(tag, address, port, host, sni, proxyIPs, isFragment
             sockopt: {},
             wsSettings: {
                 host: host,
-                path: path
+                path,
             }
         },
         tag: tag
@@ -251,10 +259,10 @@ function buildXrayVLOutbound(tag, address, port, host, sni, proxyIPs, isFragment
     return outbound;
 }
 
-function buildXrayTROutbound(tag, address, port, host, sni, proxyIPs, isFragment, allowInsecure) {
+function buildXrayTROutbound(tag, address, port, host, sni, isFragment, allowInsecure) {
     const settings = globalThis.settings;
-    const proxyIpPath = proxyIPs.length ? `/${btoa(proxyIPs.join(','))}` : '';
-    const path = `/tr${getRandomPath(16)}${proxyIpPath}?ed=2560`;
+    const path = `${generateWsPath("tr")}?ed=2560`;
+
     const outbound = {
         protocol: atob('dHJvamFu'),
         settings: {
@@ -273,7 +281,7 @@ function buildXrayTROutbound(tag, address, port, host, sni, proxyIPs, isFragment
             sockopt: {},
             wsSettings: {
                 host: host,
-                path: path
+                path
             }
         },
         tag: tag
@@ -685,8 +693,8 @@ export async function getXrayCustomConfigs(env, isFragment) {
                 const customConfig = await buildXrayConfig(remark, false, chainProxy, false, false, isFragment, false, [addr], null);
 
                 const outbound = protocol === atob('VkxFU1M=')
-                    ? buildXrayVLOutbound('proxy', addr, port, host, sni, settings.proxyIPs, isFragment, isCustomAddr)
-                    : buildXrayTROutbound('proxy', addr, port, host, sni, settings.proxyIPs, isFragment, isCustomAddr);
+                    ? buildXrayVLOutbound('proxy', addr, port, host, sni, isFragment, isCustomAddr)
+                    : buildXrayTROutbound('proxy', addr, port, host, sni, isFragment, isCustomAddr);
 
                 customConfig.outbounds.unshift({ ...outbound });
                 outbounds.proxies.push(outbound);
